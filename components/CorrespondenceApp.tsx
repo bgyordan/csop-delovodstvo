@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, FileText, X, Paperclip, CircleCheck as CheckCircle2, Clock, ChevronDown, Calendar, User, AlignLeft, ExternalLink, Loader as Loader2, BookOpen, ScrollText } from 'lucide-react';
+import { Search, Plus, FileText, X, Paperclip, CircleCheck as CheckCircle2, Clock, ChevronDown, Calendar, User, ExternalLink, Loader as Loader2, BookOpen, ScrollText } from 'lucide-react';
+import ContractForm from './ContractForm';
 
-type DocStatus = 'new' | 'in_progress' | 'completed' | 'archived';
+type DocStatus = 'new' | 'in_progress' | 'completed' | 'archived' | 'active' | 'expired' | 'terminated';
 type ResolutionType = 'director' | 'zdasd' | 'zdud' | 'accounting' | 'specialists';
 type SheetType = 'Документи' | 'Договори' | 'Заповеди';
 
@@ -37,7 +38,7 @@ export default function CorrespondenceApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | DocStatus>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterResolution, setFilterResolution] = useState<'all' | ResolutionType>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -87,7 +88,7 @@ export default function CorrespondenceApp() {
     return matchStatus && matchResolution && matchSearch;
   });
 
-  const totalNew = docs.filter((d) => d.status === 'new').length;
+  const totalNew = docs.filter((d) => d.status === 'new' || d.status === 'active').length;
   const totalInProgress = docs.filter((d) => d.status === 'in_progress').length;
 
   const resetForm = () => {
@@ -95,8 +96,7 @@ export default function CorrespondenceApp() {
     setFileData(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveDocument = async (docData: Record<string, string>, fd?: { name: string; mimeType: string; data: string } | null) => {
     setSubmitting(true);
     try {
       const response = await fetch('/api/documents', {
@@ -104,16 +104,8 @@ export default function CorrespondenceApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sheet: activeSheet,
-          document: {
-            regNumber: form.regNumber,
-            date: form.date,
-            correspondent: form.correspondent,
-            subject: form.subject,
-            resolution: form.resolution,
-            status: form.status,
-            fileName: fileData?.name || form.fileName || '',
-          },
-          fileData,
+          document: docData,
+          fileData: fd || fileData,
         }),
       });
       if (response.ok) {
@@ -130,6 +122,19 @@ export default function CorrespondenceApp() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveDocument({
+      regNumber: form.regNumber,
+      date: form.date,
+      correspondent: form.correspondent,
+      subject: form.subject,
+      resolution: form.resolution,
+      status: form.status,
+      fileName: fileData?.name || form.fileName || '',
+    });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,6 +167,10 @@ export default function CorrespondenceApp() {
 
   const correspondentLabel = CORRESPONDENT_LABEL[activeSheet];
 
+  const statusOptions = activeSheet === 'Договори'
+    ? [{ value: 'all', label: 'Всички статуси' }, { value: 'active', label: 'Активен' }, { value: 'in_progress', label: 'В изпълнение' }, { value: 'expired', label: 'Изтекъл' }, { value: 'terminated', label: 'Прекратен' }]
+    : [{ value: 'all', label: 'Всички статуси' }, { value: 'new', label: 'Нов' }, { value: 'in_progress', label: 'В процес' }, { value: 'completed', label: 'Изпълнен' }, { value: 'archived', label: 'Архивиран' }];
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
       {/* Header */}
@@ -193,7 +202,7 @@ export default function CorrespondenceApp() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           <StatCard label="Общо" value={docs.length} icon={<FileText className="w-4 h-4 text-slate-600" />} color="bg-slate-100" textColor="text-slate-700" />
-          <StatCard label="Нови" value={totalNew} icon={<FileText className="w-4 h-4 text-blue-600" />} color="bg-blue-50" textColor="text-blue-700" accent="border-blue-200" />
+          <StatCard label={activeSheet === 'Договори' ? 'Активни' : 'Нови'} value={totalNew} icon={<FileText className="w-4 h-4 text-blue-600" />} color="bg-blue-50" textColor="text-blue-700" accent="border-blue-200" />
           <StatCard label="В процес" value={totalInProgress} icon={<Clock className="w-4 h-4 text-amber-600" />} color="bg-amber-50" textColor="text-amber-700" accent="border-amber-200" />
         </div>
 
@@ -204,9 +213,7 @@ export default function CorrespondenceApp() {
               key={tab.key}
               onClick={() => setActiveSheet(tab.key)}
               className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                activeSheet === tab.key
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
+                activeSheet === tab.key ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               {tab.icon}
@@ -221,10 +228,7 @@ export default function CorrespondenceApp() {
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-800">Регистър — {activeSheet}</h2>
-                <button
-                  onClick={() => setModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm whitespace-nowrap"
-                >
+                <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm whitespace-nowrap">
                   <Plus className="w-4 h-4" />
                   <span className="hidden sm:inline">Нов запис</span>
                   <span className="sm:hidden">Нов</span>
@@ -233,37 +237,29 @@ export default function CorrespondenceApp() {
 
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Търсене по номер, подател или относно..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-full placeholder:text-slate-400"
-                />
+                <input type="text" placeholder="Търсене..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-full placeholder:text-slate-400" />
               </div>
 
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as 'all' | DocStatus)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                    <option value="all">Всички статуси</option>
-                    <option value="new">Нов</option>
-                    <option value="in_progress">В процес</option>
-                    <option value="completed">Изпълнен</option>
-                    <option value="archived">Архивиран</option>
+                  <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                    {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                   <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                 </div>
-                <div className="relative flex-1">
-                  <select value={filterResolution} onChange={(e) => setFilterResolution(e.target.value as 'all' | ResolutionType)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                    <option value="all">Всички резолюции</option>
-                    <option value="director">Директор</option>
-                    <option value="zdasd">ЗДАСД</option>
-                    <option value="zdud">ЗДУД</option>
-                    <option value="accounting">Счетоводство</option>
-                    <option value="specialists">Специалисти</option>
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                </div>
+                {activeSheet !== 'Договори' && (
+                  <div className="relative flex-1">
+                    <select value={filterResolution} onChange={(e) => setFilterResolution(e.target.value as 'all' | ResolutionType)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                      <option value="all">Всички резолюции</option>
+                      <option value="director">Директор</option>
+                      <option value="zdasd">ЗДАСД</option>
+                      <option value="zdud">ЗДУД</option>
+                      <option value="accounting">Счетоводство</option>
+                      <option value="specialists">Специалисти</option>
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -276,8 +272,8 @@ export default function CorrespondenceApp() {
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Номер</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Дата</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{correspondentLabel}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Относно</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Резолюция</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Относно / Предмет</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{activeSheet === 'Договори' ? 'Отговорник' : 'Резолюция'}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Статус</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Файл</th>
                 </tr>
@@ -300,14 +296,12 @@ export default function CorrespondenceApp() {
                       <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap">{doc.date}</td>
                       <td className="px-4 py-3.5 text-slate-700 max-w-[160px]"><span className="truncate block">{doc.correspondent}</span></td>
                       <td className="px-4 py-3.5 text-slate-600 max-w-[220px]"><span className="truncate block">{doc.subject}</span></td>
-                      <td className="px-4 py-3.5"><ResolutionBadge resolution={doc.resolution} /></td>
+                      <td className="px-4 py-3.5"><ResolutionBadge resolution={doc.resolution} isContract={activeSheet === 'Договори'} /></td>
                       <td className="px-4 py-3.5"><StatusBadge status={doc.status} /></td>
                       <td className="px-4 py-3.5">
                         {doc.fileUrl ? (
                           <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                            <Paperclip className="w-3 h-3" />
-                            <span className="max-w-[80px] truncate">{doc.fileName}</span>
-                            <ExternalLink className="w-2.5 h-2.5" />
+                            <Paperclip className="w-3 h-3" /><span className="max-w-[80px] truncate">{doc.fileName}</span><ExternalLink className="w-2.5 h-2.5" />
                           </a>
                         ) : doc.fileName ? (
                           <span className="flex items-center gap-1 text-xs text-slate-400"><Paperclip className="w-3 h-3" /><span className="max-w-[80px] truncate">{doc.fileName}</span></span>
@@ -345,7 +339,7 @@ export default function CorrespondenceApp() {
                     <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{doc.date}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <ResolutionBadge resolution={doc.resolution} />
+                    <ResolutionBadge resolution={doc.resolution} isContract={activeSheet === 'Договори'} />
                     {doc.fileUrl ? (
                       <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
                         <Paperclip className="w-3 h-3" /><span className="max-w-[120px] truncate">{doc.fileName}</span><ExternalLink className="w-2.5 h-2.5" />
@@ -365,91 +359,102 @@ export default function CorrespondenceApp() {
 
       {/* Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={(e) => { if (e.target === e.currentTarget && !submitting) setModalOpen(false); }}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={(e) => { if (e.target === e.currentTarget && !submitting) { setModalOpen(false); resetForm(); } }}>
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg border border-slate-200 overflow-hidden max-h-[95vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/60 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Plus className="w-4 h-4 text-white" />
-                </div>
-                <h3 className="text-base font-semibold text-slate-900">Нов запис — {activeSheet}</h3>
-              </div>
-              <button onClick={() => { setModalOpen(false); resetForm(); }} disabled={submitting} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Номер <span className="text-slate-400 normal-case font-normal">(оставете празно за автоматичен)</span></label>
-                <input type="text" placeholder="напр. 125/24.05.2026" value={form.regNumber} onChange={(e) => setForm((f) => ({ ...f, regNumber: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><Calendar className="inline w-3 h-3 mr-1" />Дата</label>
-                <input type="date" required value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><User className="inline w-3 h-3 mr-1" />{correspondentLabel}</label>
-                <input type="text" required placeholder="Организация или лице..." value={form.correspondent} onChange={(e) => setForm((f) => ({ ...f, correspondent: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><AlignLeft className="inline w-3 h-3 mr-1" />Относно / Предмет</label>
-                <textarea required rows={3} placeholder="Кратко описание..." value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 resize-none disabled:opacity-50" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Резолюция</label>
-                <div className="relative">
-                  <select value={form.resolution} onChange={(e) => setForm((f) => ({ ...f, resolution: e.target.value as ResolutionType }))} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
-                    <option value="">Изберете резолюция...</option>
-                    <option value="director">Директор (Светлана Иванова)</option>
-                    <option value="zdasd">ЗДАСД (Йордан Йорданов)</option>
-                    <option value="zdud">ЗДУД (Силвия Кьошкерян)</option>
-                    <option value="accounting">Счетоводство (Радка Георгиева)</option>
-                    <option value="specialists">Специалисти</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Статус</label>
-                <div className="relative">
-                  <select required value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as DocStatus }))} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
-                    <option value="new">Нов</option>
-                    <option value="in_progress">В процес</option>
-                    <option value="completed">Изпълнен</option>
-                    <option value="archived">За сведение / Архивиран</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><Paperclip className="inline w-3 h-3 mr-1" />Прикачен файл</label>
-                <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg px-4 py-5 text-center cursor-pointer transition-all ${dragOver ? 'border-blue-400 bg-blue-50' : form.fileName ? 'border-teal-300 bg-teal-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
-                  <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileChange} disabled={submitting} />
-                  {form.fileName || fileData ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <Paperclip className="w-4 h-4 text-teal-500" />
-                      <span className="text-sm text-teal-700 font-medium">{form.fileName || fileData?.name}</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setForm((f) => ({ ...f, fileName: '' })); setFileData(null); }} disabled={submitting} className="ml-1 text-teal-400 hover:text-teal-600"><X className="w-3.5 h-3.5" /></button>
+            {/* Договори — специална форма */}
+            {activeSheet === 'Договори' ? (
+              <ContractForm
+                onClose={() => { setModalOpen(false); resetForm(); }}
+                onSave={(docData) => saveDocument(docData)}
+                submitting={submitting}
+              />
+            ) : (
+              <>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/60 shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <Plus className="w-4 h-4 text-white" />
                     </div>
-                  ) : (
-                    <div>
-                      <Paperclip className="w-5 h-5 text-slate-300 mx-auto mb-1.5" />
-                      <p className="text-xs text-slate-500">Плъзнете файл или <span className="text-blue-600 font-medium">изберете от компютъра</span></p>
-                      <p className="text-xs text-slate-400 mt-0.5">PDF, DOC, DOCX, XLS, XLSX, PNG, JPG</p>
-                    </div>
-                  )}
+                    <h3 className="text-base font-semibold text-slate-900">Нов запис — {activeSheet}</h3>
+                  </div>
+                  <button onClick={() => { setModalOpen(false); resetForm(); }} disabled={submitting} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-              </div>
 
-              <div className="flex gap-2 pt-1 pb-2">
-                <button type="button" onClick={() => { setModalOpen(false); resetForm(); }} disabled={submitting} className="flex-1 py-2.5 px-4 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">Отказ</button>
-                <button type="submit" disabled={submitting} className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                  {submitting ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Запазване...</span></>) : 'Запази'}
-                </button>
-              </div>
-            </form>
+                <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 overflow-y-auto">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Номер <span className="text-slate-400 normal-case font-normal">(оставете празно за автоматичен)</span></label>
+                    <input type="text" placeholder="напр. 125/24.05.2026" value={form.regNumber} onChange={(e) => setForm((f) => ({ ...f, regNumber: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><Calendar className="inline w-3 h-3 mr-1" />Дата</label>
+                    <input type="date" required value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><User className="inline w-3 h-3 mr-1" />{correspondentLabel}</label>
+                    <input type="text" required placeholder="Организация или лице..." value={form.correspondent} onChange={(e) => setForm((f) => ({ ...f, correspondent: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Относно / Предмет</label>
+                    <textarea required rows={3} placeholder="Кратко описание..." value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 resize-none disabled:opacity-50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Резолюция</label>
+                    <div className="relative">
+                      <select value={form.resolution} onChange={(e) => setForm((f) => ({ ...f, resolution: e.target.value as ResolutionType }))} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
+                        <option value="">Изберете резолюция...</option>
+                        <option value="director">Директор (Светлана Иванова)</option>
+                        <option value="zdasd">ЗДАСД (Йордан Йорданов)</option>
+                        <option value="zdud">ЗДУД (Силвия Кьошкерян)</option>
+                        <option value="accounting">Счетоводство (Радка Георгиева)</option>
+                        <option value="specialists">Специалисти</option>
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Статус</label>
+                    <div className="relative">
+                      <select required value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as DocStatus }))} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
+                        <option value="new">Нов</option>
+                        <option value="in_progress">В процес</option>
+                        <option value="completed">Изпълнен</option>
+                        <option value="archived">За сведение / Архивиран</option>
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><Paperclip className="inline w-3 h-3 mr-1" />Прикачен файл</label>
+                    <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg px-4 py-5 text-center cursor-pointer transition-all ${dragOver ? 'border-blue-400 bg-blue-50' : form.fileName ? 'border-teal-300 bg-teal-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
+                      <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileChange} disabled={submitting} />
+                      {form.fileName || fileData ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <Paperclip className="w-4 h-4 text-teal-500" />
+                          <span className="text-sm text-teal-700 font-medium">{form.fileName || fileData?.name}</span>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setForm((f) => ({ ...f, fileName: '' })); setFileData(null); }} disabled={submitting} className="ml-1 text-teal-400 hover:text-teal-600"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ) : (
+                        <div>
+                          <Paperclip className="w-5 h-5 text-slate-300 mx-auto mb-1.5" />
+                          <p className="text-xs text-slate-500">Плъзнете файл или <span className="text-blue-600 font-medium">изберете от компютъра</span></p>
+                          <p className="text-xs text-slate-400 mt-0.5">PDF, DOC, DOCX, XLS, XLSX, PNG, JPG</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1 pb-2">
+                    <button type="button" onClick={() => { setModalOpen(false); resetForm(); }} disabled={submitting} className="flex-1 py-2.5 px-4 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">Отказ</button>
+                    <button type="submit" disabled={submitting} className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                      {submitting ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Запазване...</span></>) : 'Запази'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -475,6 +480,9 @@ function StatusBadge({ status }: { status: DocStatus }) {
     in_progress:{ bg: 'bg-amber-50',  text: 'text-amber-700', border: 'border-amber-100', icon: <Clock className="w-3 h-3" />,         label: 'В процес' },
     completed:  { bg: 'bg-teal-50',   text: 'text-teal-700',  border: 'border-teal-100',  icon: <CheckCircle2 className="w-3 h-3" />,  label: 'Изпълнен' },
     archived:   { bg: 'bg-slate-50',  text: 'text-slate-600', border: 'border-slate-200', icon: <CheckCircle2 className="w-3 h-3" />,  label: 'Архивиран' },
+    active:     { bg: 'bg-teal-50',   text: 'text-teal-700',  border: 'border-teal-100',  icon: <CheckCircle2 className="w-3 h-3" />,  label: 'Активен' },
+    expired:    { bg: 'bg-red-50',    text: 'text-red-700',   border: 'border-red-100',   icon: <Clock className="w-3 h-3" />,         label: 'Изтекъл' },
+    terminated: { bg: 'bg-slate-50',  text: 'text-slate-600', border: 'border-slate-200', icon: <X className="w-3 h-3" />,             label: 'Прекратен' },
   };
   const c = config[status] || { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200', icon: null, label: status };
   return (
@@ -484,7 +492,14 @@ function StatusBadge({ status }: { status: DocStatus }) {
   );
 }
 
-function ResolutionBadge({ resolution }: { resolution: ResolutionType }) {
+function ResolutionBadge({ resolution, isContract }: { resolution: ResolutionType; isContract?: boolean }) {
+  if (isContract) {
+    return (
+      <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200 whitespace-nowrap max-w-[140px] truncate">
+        {resolution}
+      </span>
+    );
+  }
   const labels: Record<string, string> = {
     director: 'Директор', zdasd: 'ЗДАСД', zdud: 'ЗДУД', accounting: 'Счетоводство', specialists: 'Специалисти',
     'Директор (Светлана Иванова)': 'Директор', 'ЗДАСД (Йордан Йорданов)': 'ЗДАСД',
