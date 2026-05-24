@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     )
     if (user) {
       const role = user[2] || 'viewer'
-      const name = user[3] || username
+      const name = username
       cookies().set('auth', process.env.APP_PASSWORD!, {
         httpOnly: true,
         secure: true,
