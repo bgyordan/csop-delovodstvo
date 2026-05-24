@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, FileText, X, Paperclip, CircleCheck as CheckCircle2, Clock, ChevronDown, Calendar, User, ExternalLink, Loader as Loader2, BookOpen, ScrollText, MailOpen, Send } from 'lucide-react';
+import { Search, Plus, FileText, X, Paperclip, CircleCheck as CheckCircle2, Clock, ChevronDown, Calendar, User, ExternalLink, Loader as Loader2, BookOpen, ScrollText, MailOpen, Send, Printer } from 'lucide-react';
 import ContractForm from './ContractForm';
 import OrderForm from './OrderForm';
+import PrintView from './PrintView';
 
 type DocStatus = 'new' | 'in_progress' | 'completed' | 'archived' | 'active' | 'expired' | 'terminated';
 type ResolutionType = 'director' | 'zdasd' | 'zdud' | 'accounting' | 'specialists';
@@ -44,6 +45,9 @@ export default function CorrespondenceApp() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterResolution, setFilterResolution] = useState<'all' | ResolutionType>('all');
   const [modalOpen, setModalOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     regNumber: '',
@@ -232,12 +236,18 @@ export default function CorrespondenceApp() {
           <div className="px-4 py-3 border-b border-slate-100">
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-800">{activeSheet} поща {activeSheet === 'Договори' || activeSheet === 'Заповеди' ? '— Регистър' : '— Регистър'}</h2>
-                <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm whitespace-nowrap">
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Нов запис</span>
-                  <span className="sm:hidden">Нов</span>
-                </button>
+                <h2 className="text-sm font-semibold text-slate-800">Регистър — {activeSheet}</h2>
+                <div className="flex gap-2">
+                  <button onClick={() => setPrintOpen(true)} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
+                    <Printer className="w-4 h-4" />
+                    <span className="hidden sm:inline">Печат</span>
+                  </button>
+                  <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm whitespace-nowrap">
+                    <Plus className="w-4 h-4" />
+                    <span className="hidden sm:inline">Нов запис</span>
+                    <span className="sm:hidden">Нов</span>
+                  </button>
+                </div>
               </div>
 
               <div className="relative">
@@ -361,6 +371,19 @@ export default function CorrespondenceApp() {
           </div>
         </div>
       </main>
+
+      {/* Print View */}
+      {printOpen && (
+        <PrintView
+          docs={docs}
+          sheetName={activeSheet}
+          onClose={() => setPrintOpen(false)}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+        />
+      )}
 
       {/* Modal */}
       {modalOpen && (
