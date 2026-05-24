@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, FileText, X, Paperclip, CircleCheck as CheckCircle2, Clock, ChevronDown, Calendar, User, AlignLeft, ExternalLink, Loader as Loader2 } from 'lucide-react';
+import { Search, Plus, FileText, X, Paperclip, CircleCheck as CheckCircle2, Clock, ChevronDown, Calendar, User, AlignLeft, ExternalLink, Loader as Loader2, BookOpen, ScrollText } from 'lucide-react';
 
 type DocStatus = 'new' | 'in_progress' | 'completed' | 'archived';
 type ResolutionType = 'director' | 'zdasd' | 'zdud' | 'accounting' | 'specialists';
+type SheetType = 'Документи' | 'Договори' | 'Заповеди';
 
 interface Document {
   id: string;
@@ -18,7 +19,20 @@ interface Document {
   fileUrl?: string;
 }
 
+const TABS: { key: SheetType; label: string; icon: React.ReactNode }[] = [
+  { key: 'Документи', label: 'Документи', icon: <FileText className="w-4 h-4" /> },
+  { key: 'Договори',  label: 'Договори',  icon: <BookOpen className="w-4 h-4" /> },
+  { key: 'Заповеди', label: 'Заповеди',  icon: <ScrollText className="w-4 h-4" /> },
+];
+
+const CORRESPONDENT_LABEL: Record<SheetType, string> = {
+  'Документи': 'Подател / Получател',
+  'Договори':  'Контрагент',
+  'Заповеди':  'Относно',
+};
+
 export default function CorrespondenceApp() {
+  const [activeSheet, setActiveSheet] = useState<SheetType>('Документи');
   const [docs, setDocs] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,21 +51,17 @@ export default function CorrespondenceApp() {
     fileName: '',
   });
   const [dragOver, setDragOver] = useState(false);
-  const [fileData, setFileData] = useState<{
-    name: string;
-    mimeType: string;
-    data: string;
-  } | null>(null);
+  const [fileData, setFileData] = useState<{ name: string; mimeType: string; data: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = async (sheet: SheetType) => {
     try {
       setLoading(true);
-      const response = await fetch('/api/documents');
+      setError(null);
+      const response = await fetch(`/api/documents?sheet=${encodeURIComponent(sheet)}`);
       const data = await response.json();
       if (response.ok) {
         setDocs(data.documents || []);
-        setError(null);
       } else {
         setError(data.error || 'Грешка при зареждане');
       }
@@ -62,18 +72,28 @@ export default function CorrespondenceApp() {
     }
   };
 
-  useEffect(() => { fetchDocuments(); }, []);
+  useEffect(() => {
+    fetchDocuments(activeSheet);
+    setSearch('');
+    setFilterStatus('all');
+    setFilterResolution('all');
+  }, [activeSheet]);
 
   const filtered = docs.filter((d) => {
     const matchStatus = filterStatus === 'all' || d.status === filterStatus;
     const matchResolution = filterResolution === 'all' || d.resolution === filterResolution;
     const q = search.toLowerCase();
-    const matchSearch = !q || d.regNumber.toLowerCase().includes(q) || d.subject.toLowerCase().includes(q) || d.correspondent.toLowerCase().includes(q);
+    const matchSearch = !q || d.regNumber?.toLowerCase().includes(q) || d.subject?.toLowerCase().includes(q) || d.correspondent?.toLowerCase().includes(q);
     return matchStatus && matchResolution && matchSearch;
   });
 
   const totalNew = docs.filter((d) => d.status === 'new').length;
   const totalInProgress = docs.filter((d) => d.status === 'in_progress').length;
+
+  const resetForm = () => {
+    setForm({ regNumber: '', date: new Date().toISOString().split('T')[0], correspondent: '', subject: '', resolution: '', status: 'new', fileName: '' });
+    setFileData(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +103,7 @@ export default function CorrespondenceApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          sheet: activeSheet,
           document: {
             regNumber: form.regNumber,
             date: form.date,
@@ -99,8 +120,7 @@ export default function CorrespondenceApp() {
         const data = await response.json();
         setDocs((prev) => [...prev, data.document]);
         setModalOpen(false);
-        setForm({ regNumber: '', date: new Date().toISOString().split('T')[0], correspondent: '', subject: '', resolution: '', status: 'new', fileName: '' });
-        setFileData(null);
+        resetForm();
       } else {
         const data = await response.json();
         alert(data.error || 'Грешка при запазване');
@@ -112,7 +132,7 @@ export default function CorrespondenceApp() {
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -139,6 +159,8 @@ export default function CorrespondenceApp() {
       reader.readAsDataURL(file);
     }
   };
+
+  const correspondentLabel = CORRESPONDENT_LABEL[activeSheet];
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -175,22 +197,40 @@ export default function CorrespondenceApp() {
           <StatCard label="В процес" value={totalInProgress} icon={<Clock className="w-4 h-4 text-amber-600" />} color="bg-amber-50" textColor="text-amber-700" accent="border-amber-200" />
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-1 mb-4 bg-white border border-slate-200 rounded-xl p-1 shadow-sm w-full sm:w-auto sm:inline-flex">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveSheet(tab.key)}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeSheet === tab.key
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
         {/* Controls */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100">
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-800">Регистър на документите</h2>
+                <h2 className="text-sm font-semibold text-slate-800">Регистър — {activeSheet}</h2>
                 <button
                   onClick={() => setModalOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm whitespace-nowrap"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Нов документ</span>
+                  <span className="hidden sm:inline">Нов запис</span>
+                  <span className="sm:hidden">Нов</span>
                 </button>
               </div>
 
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -202,14 +242,9 @@ export default function CorrespondenceApp() {
                 />
               </div>
 
-              {/* Filters */}
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value as 'all' | DocStatus)}
-                    className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
+                  <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as 'all' | DocStatus)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
                     <option value="all">Всички статуси</option>
                     <option value="new">Нов</option>
                     <option value="in_progress">В процес</option>
@@ -219,11 +254,7 @@ export default function CorrespondenceApp() {
                   <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                 </div>
                 <div className="relative flex-1">
-                  <select
-                    value={filterResolution}
-                    onChange={(e) => setFilterResolution(e.target.value as 'all' | ResolutionType)}
-                    className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
+                  <select value={filterResolution} onChange={(e) => setFilterResolution(e.target.value as 'all' | ResolutionType)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
                     <option value="all">Всички резолюции</option>
                     <option value="director">Директор</option>
                     <option value="zdasd">ЗДАСД</option>
@@ -244,7 +275,7 @@ export default function CorrespondenceApp() {
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Номер</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Дата</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Подател / Получател</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{correspondentLabel}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Относно</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Резолюция</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Статус</th>
@@ -253,19 +284,15 @@ export default function CorrespondenceApp() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-16 text-center text-slate-400">
-                      <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin text-slate-300" />
-                      <span className="text-xs">Зареждане...</span>
-                    </td>
-                  </tr>
+                  <tr><td colSpan={7} className="px-5 py-16 text-center text-slate-400">
+                    <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin text-slate-300" />
+                    <span className="text-xs">Зареждане...</span>
+                  </td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-16 text-center text-slate-400">
-                      <FileText className="w-10 h-10 mx-auto mb-3 text-slate-200" />
-                      Няма намерени документи
-                    </td>
-                  </tr>
+                  <tr><td colSpan={7} className="px-5 py-16 text-center text-slate-400">
+                    <FileText className="w-10 h-10 mx-auto mb-3 text-slate-200" />
+                    Няма намерени записи
+                  </td></tr>
                 ) : (
                   filtered.map((doc) => (
                     <tr key={doc.id} className="hover:bg-blue-50/40 transition-colors">
@@ -283,10 +310,7 @@ export default function CorrespondenceApp() {
                             <ExternalLink className="w-2.5 h-2.5" />
                           </a>
                         ) : doc.fileName ? (
-                          <span className="flex items-center gap-1 text-xs text-slate-400">
-                            <Paperclip className="w-3 h-3" />
-                            <span className="max-w-[80px] truncate">{doc.fileName}</span>
-                          </span>
+                          <span className="flex items-center gap-1 text-xs text-slate-400"><Paperclip className="w-3 h-3" /><span className="max-w-[80px] truncate">{doc.fileName}</span></span>
                         ) : <span className="text-slate-300">—</span>}
                       </td>
                     </tr>
@@ -306,7 +330,7 @@ export default function CorrespondenceApp() {
             ) : filtered.length === 0 ? (
               <div className="py-16 text-center text-slate-400">
                 <FileText className="w-10 h-10 mx-auto mb-3 text-slate-200" />
-                <p className="text-sm">Няма намерени документи</p>
+                <p className="text-sm">Няма намерени записи</p>
               </div>
             ) : (
               filtered.map((doc) => (
@@ -324,14 +348,8 @@ export default function CorrespondenceApp() {
                     <ResolutionBadge resolution={doc.resolution} />
                     {doc.fileUrl ? (
                       <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                        <Paperclip className="w-3 h-3" />
-                        <span className="max-w-[120px] truncate">{doc.fileName}</span>
-                        <ExternalLink className="w-2.5 h-2.5" />
+                        <Paperclip className="w-3 h-3" /><span className="max-w-[120px] truncate">{doc.fileName}</span><ExternalLink className="w-2.5 h-2.5" />
                       </a>
-                    ) : doc.fileName ? (
-                      <span className="flex items-center gap-1 text-xs text-slate-400">
-                        <Paperclip className="w-3 h-3" />{doc.fileName}
-                      </span>
                     ) : null}
                   </div>
                 </div>
@@ -340,7 +358,7 @@ export default function CorrespondenceApp() {
           </div>
 
           <div className="px-4 py-3 border-t border-slate-100">
-            <span className="text-xs text-slate-400">{filtered.length} {filtered.length === 1 ? 'документ' : 'документа'}</span>
+            <span className="text-xs text-slate-400">{filtered.length} {filtered.length === 1 ? 'запис' : 'записа'}</span>
           </div>
         </div>
       </main>
@@ -355,34 +373,34 @@ export default function CorrespondenceApp() {
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                   <Plus className="w-4 h-4 text-white" />
                 </div>
-                <h3 className="text-base font-semibold text-slate-900">Нов документ</h3>
+                <h3 className="text-base font-semibold text-slate-900">Нов запис — {activeSheet}</h3>
               </div>
-              <button onClick={() => setModalOpen(false)} disabled={submitting} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+              <button onClick={() => { setModalOpen(false); resetForm(); }} disabled={submitting} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 overflow-y-auto">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Номер</label>
-                <input type="text" required placeholder="Въведете номер..." value={form.regNumber} onChange={(e) => setForm((f) => ({ ...f, regNumber: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Номер <span className="text-slate-400 normal-case font-normal">(оставете празно за автоматичен)</span></label>
+                <input type="text" placeholder="напр. 125/24.05.2026" value={form.regNumber} onChange={(e) => setForm((f) => ({ ...f, regNumber: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><Calendar className="inline w-3 h-3 mr-1" />Дата</label>
                 <input type="date" required value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><User className="inline w-3 h-3 mr-1" />Подател / Получател</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><User className="inline w-3 h-3 mr-1" />{correspondentLabel}</label>
                 <input type="text" required placeholder="Организация или лице..." value={form.correspondent} onChange={(e) => setForm((f) => ({ ...f, correspondent: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><AlignLeft className="inline w-3 h-3 mr-1" />Относно</label>
-                <textarea required rows={3} placeholder="Кратко описание на документа..." value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 resize-none disabled:opacity-50" />
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><AlignLeft className="inline w-3 h-3 mr-1" />Относно / Предмет</label>
+                <textarea required rows={3} placeholder="Кратко описание..." value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 resize-none disabled:opacity-50" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Резолюция</label>
                 <div className="relative">
-                  <select required value={form.resolution} onChange={(e) => setForm((f) => ({ ...f, resolution: e.target.value as ResolutionType }))} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
+                  <select value={form.resolution} onChange={(e) => setForm((f) => ({ ...f, resolution: e.target.value as ResolutionType }))} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
                     <option value="">Изберете резолюция...</option>
                     <option value="director">Директор (Светлана Иванова)</option>
                     <option value="zdasd">ЗДАСД (Йордан Йорданов)</option>
@@ -407,21 +425,13 @@ export default function CorrespondenceApp() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><Paperclip className="inline w-3 h-3 mr-1" />Прикачен файл</label>
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-lg px-4 py-5 text-center cursor-pointer transition-all ${dragOver ? 'border-blue-400 bg-blue-50' : form.fileName ? 'border-teal-300 bg-teal-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
-                >
+                <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg px-4 py-5 text-center cursor-pointer transition-all ${dragOver ? 'border-blue-400 bg-blue-50' : form.fileName ? 'border-teal-300 bg-teal-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
                   <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileChange} disabled={submitting} />
                   {form.fileName || fileData ? (
                     <div className="flex items-center justify-center gap-2">
                       <Paperclip className="w-4 h-4 text-teal-500" />
                       <span className="text-sm text-teal-700 font-medium">{form.fileName || fileData?.name}</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setForm((f) => ({ ...f, fileName: '' })); setFileData(null); }} disabled={submitting} className="ml-1 text-teal-400 hover:text-teal-600">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setForm((f) => ({ ...f, fileName: '' })); setFileData(null); }} disabled={submitting} className="ml-1 text-teal-400 hover:text-teal-600"><X className="w-3.5 h-3.5" /></button>
                     </div>
                   ) : (
                     <div>
@@ -434,9 +444,9 @@ export default function CorrespondenceApp() {
               </div>
 
               <div className="flex gap-2 pt-1 pb-2">
-                <button type="button" onClick={() => setModalOpen(false)} disabled={submitting} className="flex-1 py-2.5 px-4 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">Отказ</button>
+                <button type="button" onClick={() => { setModalOpen(false); resetForm(); }} disabled={submitting} className="flex-1 py-2.5 px-4 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">Отказ</button>
                 <button type="submit" disabled={submitting} className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                  {submitting ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Запазване...</span></>) : 'Запази документ'}
+                  {submitting ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Запазване...</span></>) : 'Запази'}
                 </button>
               </div>
             </form>
@@ -461,10 +471,10 @@ function StatCard({ label, value, icon, color, textColor, accent }: { label: str
 
 function StatusBadge({ status }: { status: DocStatus }) {
   const config: Record<string, { bg: string; text: string; border: string; icon: React.ReactNode; label: string }> = {
-    new: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-100', icon: <FileText className="w-3 h-3" />, label: 'Нов' },
-    in_progress: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', icon: <Clock className="w-3 h-3" />, label: 'В процес' },
-    completed: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-100', icon: <CheckCircle2 className="w-3 h-3" />, label: 'Изпълнен' },
-    archived: { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', icon: <CheckCircle2 className="w-3 h-3" />, label: 'Архивиран' },
+    new:        { bg: 'bg-blue-50',   text: 'text-blue-700',  border: 'border-blue-100',  icon: <FileText className="w-3 h-3" />,      label: 'Нов' },
+    in_progress:{ bg: 'bg-amber-50',  text: 'text-amber-700', border: 'border-amber-100', icon: <Clock className="w-3 h-3" />,         label: 'В процес' },
+    completed:  { bg: 'bg-teal-50',   text: 'text-teal-700',  border: 'border-teal-100',  icon: <CheckCircle2 className="w-3 h-3" />,  label: 'Изпълнен' },
+    archived:   { bg: 'bg-slate-50',  text: 'text-slate-600', border: 'border-slate-200', icon: <CheckCircle2 className="w-3 h-3" />,  label: 'Архивиран' },
   };
   const c = config[status] || { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200', icon: null, label: status };
   return (
