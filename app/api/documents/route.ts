@@ -2,28 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google, Auth } from 'googleapis';
 import { Readable } from 'stream';
 
+const VALID_SHEETS = ['Документи', 'Договори', 'Заповеди'];
+
 const getAuth = (): Auth.GoogleAuth => {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY;
 
-  console.log('=== Google Auth Check ===');
-  console.log('Client Email exists:', !!clientEmail);
-  console.log('Private Key exists:', !!privateKey);
-  console.log('Private Key length:', privateKey?.length || 0);
-  console.log('Private Key first 50 chars:', privateKey?.substring(0, 50) || 'N/A');
+  if (!clientEmail) throw new Error('GOOGLE_CLIENT_EMAIL is not set');
+  if (!privateKey || privateKey === '""' || privateKey === '') throw new Error('GOOGLE_PRIVATE_KEY is not set or is empty');
 
-  if (!clientEmail) {
-    throw new Error('GOOGLE_CLIENT_EMAIL is not set');
-  }
-
-  if (!privateKey || privateKey === '""' || privateKey === '') {
-    throw new Error('GOOGLE_PRIVATE_KEY is not set or is empty');
-  }
-
-  // Replace \n with actual newlines
   const formattedKey = privateKey.replace(/\\n/g, '\n');
-
-  console.log('Formatted key first line:', formattedKey.split('\n')[0]);
 
   return new google.auth.GoogleAuth({
     credentials: {
@@ -54,21 +42,31 @@ interface Document {
   fileUrl?: string;
 }
 
-export async function GET() {
+const SHEET_HEADERS: Record<string, string[]> = {
+  'Документи': ['ID', 'Номер', 'Дата', 'Подател/Получател', 'Относно', 'Резолюция', 'Статус', 'Файл', 'Линк'],
+  'Договори':  ['ID', 'Номер', 'Дата', 'Контрагент', 'Предмет', 'Резолюция', 'Статус', 'Файл', 'Линк'],
+  'Заповеди':  ['ID', 'Номер', 'Дата', 'Относно', 'Предмет', 'Резолюция', 'Статус', 'Файл', 'Линк'],
+};
+
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const sheetName = searchParams.get('sheet') || 'Документи';
+
+    if (!VALID_SHEETS.includes(sheetName)) {
+      return NextResponse.json({ error: 'Invalid sheet name' }, { status: 400 });
+    }
+
     const sheets = await getSheets();
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
     if (!spreadsheetId) {
-      return NextResponse.json(
-        { error: 'SPREADSHEET_ID not configured' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'SPREADSHEET_ID not configured' }, { status: 500 });
     }
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Документи!A2:I',
+      range: `${sheetName}!A2:I`,
     });
 
     const rows = response.data.values || [];
@@ -88,9 +86,7 @@ export async function GET() {
 
     return NextResponse.json({ documents });
   } catch (error) {
-    console.error('=== GET Error ===');
-    console.error('Error message:', error instanceof Error ? error.message : String(error));
-    console.error('Full error:', error);
+    console.error('GET Error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch documents' },
       { status: 500 }
@@ -99,113 +95,77 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  console.log('=== POST Request Started ===');
-
   try {
     const body = await req.json();
-    const { document, fileData } = body as {
+    const { document, fileData, sheet } = body as {
       document: Omit<Document, 'id' | 'fileUrl'>;
       fileData?: { name: string; mimeType: string; data: string };
+      sheet?: string;
     };
 
-    console.log('Received document:', { regNumber: document.regNumber, resolution: document.resolution, status: document.status });
-    console.log('File data present:', !!fileData, fileData ? { name: fileData.name, mimeType: fileData.mimeType, dataSize: fileData.data.length } : null);
+    const sheetName = sheet && VALID_SHEETS.includes(sheet) ? sheet : 'Документи';
 
     const sheets = await getSheets();
     const spreadsheetId = process.env.SPREADSHEET_ID;
     const driveFolderId = process.env.DRIVE_FOLDER_ID;
 
-    console.log('Spreadsheet ID:', spreadsheetId);
-    console.log('Drive Folder ID:', driveFolderId);
-
     if (!spreadsheetId) {
-      console.error('SPREADSHEET_ID not configured');
-      return NextResponse.json(
-        { error: 'SPREADSHEET_ID not configured' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'SPREADSHEET_ID not configured' }, { status: 500 });
     }
 
-    // Check if sheet exists, if not create it
-    console.log('Checking if sheet exists...');
+    // Check if sheet exists, if not create it with headers
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
-    const sheetName = 'Документи';
     const existingSheet = spreadsheet.data.sheets?.find(
       (s) => s.properties?.title === sheetName
     );
 
-    console.log('Sheet exists:', !!existingSheet);
-
     if (!existingSheet) {
-      console.log('Creating new sheet...');
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         requestBody: {
-          requests: [
-            {
-              addSheet: {
-                properties: { title: sheetName },
-              },
-            },
-          ],
+          requests: [{ addSheet: { properties: { title: sheetName } } }],
         },
       });
 
-      // Add header row
-      console.log('Adding header row...');
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: 'Документи!A1:I1',
+        range: `${sheetName}!A1:I1`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
-          values: [
-            [
-              'ID',
-              'Номер',
-              'Дата',
-              'Подател/Получател',
-              'Относно',
-              'Резолюция',
-              'Статус',
-              'Файл',
-              'Линк',
-            ],
-          ],
+          values: [SHEET_HEADERS[sheetName] || SHEET_HEADERS['Документи']],
         },
       });
-      console.log('Header row added');
     }
+
+    // Get last reg number for auto-numbering
+    const existingRows = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!B2:B`,
+    });
+    const rows = existingRows.data.values || [];
+    const nextNumber = rows.length + 1;
+
+    // Auto-generate reg number if empty
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const autoRegNumber = document.regNumber || `${nextNumber}/${dd}.${mm}.${yyyy}`;
 
     let fileUrl = '';
 
     // Upload file to Google Drive if provided
-    if (fileData && fileData.data) {
-      console.log('=== Starting Drive upload ===');
-
-      if (!driveFolderId) {
-        console.error('DRIVE_FOLDER_ID not configured');
-        return NextResponse.json(
-          { error: 'DRIVE_FOLDER_ID not configured' },
-          { status: 500 }
-        );
-      }
-
+    if (fileData && fileData.data && driveFolderId) {
       try {
         const driveAuth = getAuth();
         const drive = google.drive({ version: 'v3', auth: driveAuth });
 
-        console.log('Uploading file to Drive...');
-        console.log('File name:', `${document.regNumber}_${fileData.name}`);
-        console.log('Parent folder:', driveFolderId);
-        console.log('MIME type:', fileData.mimeType);
-
-        // Convert base64 data to Buffer and create Readable stream
         const buffer = Buffer.from(fileData.data, 'base64');
         const stream = Readable.from(buffer);
 
         const driveResponse = await drive.files.create({
           requestBody: {
-            name: `${document.regNumber}_${fileData.name}`,
+            name: `${autoRegNumber}_${fileData.name}`,
             parents: [driveFolderId],
           },
           media: {
@@ -216,105 +176,60 @@ export async function POST(req: NextRequest) {
           supportsAllDrives: true,
         });
 
-        console.log('Drive response status:', driveResponse.status);
-        console.log('Drive file ID:', driveResponse.data.id);
-        console.log('Drive web link:', driveResponse.data.webViewLink);
-
         fileUrl = driveResponse.data.webViewLink || '';
 
-        // Make file accessible by anyone with the link
         if (driveResponse.data.id) {
-          console.log('Setting file permissions...');
           await drive.permissions.create({
             fileId: driveResponse.data.id,
-            requestBody: {
-              role: 'reader',
-              type: 'anyone',
-            },
+            requestBody: { role: 'reader', type: 'anyone' },
             supportsAllDrives: true,
           });
-          console.log('Permissions set successfully');
         }
       } catch (driveError) {
-        console.error('=== Drive Upload Error ===');
-        console.error('Error message:', driveError instanceof Error ? driveError.message : String(driveError));
-        console.error('Full error:', JSON.stringify(driveError, null, 2));
+        console.error('Drive Upload Error:', driveError);
         throw driveError;
       }
     }
 
-    // Generate ID
     const id = Date.now().toString();
 
-    // Format date to DD.MM.YYYY
     const formatDate = (iso: string) => {
       const [y, m, d] = iso.split('-');
       return `${d}.${m}.${y}`;
     };
 
-    // Append to sheet
-    console.log('=== Appending to Sheet ===');
-    console.log('Row data:', {
-      id,
-      regNumber: document.regNumber,
-      date: formatDate(document.date),
-      correspondent: document.correspondent,
-      subject: document.subject,
-      resolution: document.resolution,
-      status: document.status,
-      fileName: document.fileName,
-      fileUrl,
-    });
-
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Документи!A:I',
+      range: `${sheetName}!A:I`,
       valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
-        values: [
-          [
-            id,
-            document.regNumber,
-            formatDate(document.date),
-            document.correspondent,
-            document.subject,
-            document.resolution,
-            document.status,
-            document.fileName,
-            fileUrl,
-          ],
-        ],
+        values: [[
+          id,
+          autoRegNumber,
+          formatDate(document.date),
+          document.correspondent,
+          document.subject,
+          document.resolution,
+          document.status,
+          document.fileName,
+          fileUrl,
+        ]],
       },
     });
-
-    console.log('=== Document created successfully ===');
 
     return NextResponse.json({
       success: true,
       document: {
         id,
         ...document,
+        regNumber: autoRegNumber,
         date: formatDate(document.date),
         fileUrl,
       },
     });
   } catch (error) {
-    console.error('=== POST Error ===');
-    console.error('Error type:', error?.constructor?.name || typeof error);
-    console.error('Error message:', error instanceof Error ? error.message : String(error));
-
-    if (error instanceof Error) {
-      console.error('Stack trace:', error.stack);
-    }
-
-    // Check for specific Google API errors
-    if (error && typeof error === 'object' && 'response' in error) {
-      const apiError = error as { response?: { data?: unknown; status?: number } };
-      console.error('API Response:', JSON.stringify(apiError.response?.data, null, 2));
-      console.error('API Status:', apiError.response?.status);
-    }
-
+    console.error('POST Error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to create document' },
       { status: 500 }
