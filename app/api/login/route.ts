@@ -44,7 +44,7 @@ export async function POST(request: Request) {
         secure: true,
         maxAge: 60 * 60 * 24 * 7,
       })
-      cookies().set('username', encodeURIComponent(name), {
+      cookies().set('username', name, {
         httpOnly: false,
         secure: true,
         maxAge: 60 * 60 * 24 * 7,
