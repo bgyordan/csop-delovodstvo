@@ -65,9 +65,11 @@ export default function CorrespondenceApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const getCookie = (name: string) => document.cookie.split('; ').find(r => r.startsWith(name + '='))?.split('=')[1] || '';
-    setUserRole(getCookie('role') || 'viewer');
-    setUserName(decodeURIComponent(getCookie('username') || ''));
+    if (typeof window !== 'undefined') {
+      const getCookie = (name: string) => document.cookie.split('; ').find(r => r.startsWith(name + '='))?.split('=')[1] || '';
+      setUserRole(getCookie('role') || 'viewer');
+      setUserName(decodeURIComponent(getCookie('username') || ''));
+    }
   }, []);
 
   const fetchDocuments = async (sheet: SheetType) => {
