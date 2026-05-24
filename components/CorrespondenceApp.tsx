@@ -279,12 +279,14 @@ export default function CorrespondenceApp() {
               </div>
 
               <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                    {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                </div>
+                {activeSheet === 'Договори' && (
+                  <div className="relative flex-1">
+                    <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                      {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  </div>
+                )}
                 {!isSpecialForm && (
                   <div className="relative flex-1">
                     <select value={filterResolution} onChange={(e) => setFilterResolution(e.target.value as 'all' | ResolutionType)} className="appearance-none w-full pl-3 pr-7 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
@@ -312,7 +314,7 @@ export default function CorrespondenceApp() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{correspondentLabel}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Относно / Предмет</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{isSpecialForm ? 'Отговорник' : 'Резолюция'}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Статус</th>
+                  {activeSheet === 'Договори' && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Статус</th>}
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Файл</th>
                 </tr>
               </thead>
@@ -335,7 +337,7 @@ export default function CorrespondenceApp() {
                       <td className="px-4 py-3.5 text-slate-700 max-w-[160px]"><span className="truncate block">{doc.correspondent}</span></td>
                       <td className="px-4 py-3.5 text-slate-600 max-w-[220px]"><span className="truncate block">{doc.subject}</span></td>
                       <td className="px-4 py-3.5"><ResolutionBadge resolution={doc.resolution} isSpecial={isSpecialForm} /></td>
-                      <td className="px-4 py-3.5"><StatusBadge status={doc.status} /></td>
+                      {activeSheet === 'Договори' && <td className="px-4 py-3.5"><StatusBadge status={doc.status} /></td>}
                       <td className="px-4 py-3.5">
                         {doc.fileUrl ? (
                           <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
@@ -471,7 +473,19 @@ export default function CorrespondenceApp() {
                       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                     </div>
                   </div>
-                 <div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Статус</label>
+                    <div className="relative">
+                      <select required value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as DocStatus }))} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
+                        <option value="new">Нов</option>
+                        <option value="in_progress">В процес</option>
+                        <option value="completed">Изпълнен</option>
+                        <option value="archived">За сведение / Архивиран</option>
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                  <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide"><Paperclip className="inline w-3 h-3 mr-1" />Прикачен файл</label>
                     <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg px-4 py-5 text-center cursor-pointer transition-all ${dragOver ? 'border-blue-400 bg-blue-50' : form.fileName ? 'border-teal-300 bg-teal-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
                       <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileChange} disabled={submitting} />
