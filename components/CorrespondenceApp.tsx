@@ -60,7 +60,15 @@ export default function CorrespondenceApp() {
   });
   const [dragOver, setDragOver] = useState(false);
   const [fileData, setFileData] = useState<{ name: string; mimeType: string; data: string } | null>(null);
+  const [userRole, setUserRole] = useState<string>('viewer');
+  const [userName, setUserName] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const getCookie = (name: string) => document.cookie.split('; ').find(r => r.startsWith(name + '='))?.split('=')[1] || '';
+    setUserRole(getCookie('role') || 'viewer');
+    setUserName(decodeURIComponent(getCookie('username') || ''));
+  }, []);
 
   const fetchDocuments = async (sheet: SheetType) => {
     try {
@@ -192,9 +200,27 @@ export default function CorrespondenceApp() {
                 <p className="text-xs text-slate-500 leading-tight">Деловодна система</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>{new Date().toLocaleDateString('bg-BG')}</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{new Date().toLocaleDateString('bg-BG')}</span>
+              </div>
+              {userName && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 hidden sm:block">{userName}</span>
+                  <button
+                    onClick={() => {
+                      document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                      document.cookie = 'role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                      document.cookie = 'username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                      window.location.href = '/login';
+                    }}
+                    className="text-xs text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                  >
+                    Изход
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -265,11 +291,13 @@ export default function CorrespondenceApp() {
                     <Printer className="w-4 h-4" />
                     <span className="hidden sm:inline">Печат</span>
                   </button>
-                  <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm whitespace-nowrap">
-                    <Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">Нов запис</span>
-                    <span className="sm:hidden">Нов</span>
-                  </button>
+                  {userRole !== 'viewer' && (
+                    <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm whitespace-nowrap">
+                      <Plus className="w-4 h-4" />
+                      <span className="hidden sm:inline">Нов запис</span>
+                      <span className="sm:hidden">Нов</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
