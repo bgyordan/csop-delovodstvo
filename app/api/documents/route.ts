@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google, Auth } from 'googleapis';
 import { Readable } from 'stream';
 
-const VALID_SHEETS = ['Документи', 'Договори', 'Заповеди'];
+const VALID_SHEETS = ['Входяща', 'Изходяща', 'Договори', 'Заповеди'];
 
 const getAuth = (): Auth.GoogleAuth => {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
@@ -43,15 +43,23 @@ interface Document {
 }
 
 const SHEET_HEADERS: Record<string, string[]> = {
-  'Документи': ['ID', 'Номер', 'Дата', 'Подател/Получател', 'Относно', 'Резолюция', 'Статус', 'Файл', 'Линк'],
-  'Договори':  ['ID', 'Номер', 'Дата', 'Контрагент', 'Предмет', 'Резолюция', 'Статус', 'Файл', 'Линк'],
-  'Заповеди':  ['ID', 'Номер', 'Дата', 'Относно', 'Предмет', 'Резолюция', 'Статус', 'Файл', 'Линк'],
+  'Входяща':  ['ID', 'Вх. Номер', 'Дата', 'Подател', 'Относно', 'Резолюция', 'Статус', 'Файл', 'Линк'],
+  'Изходяща': ['ID', 'Изх. Номер', 'Дата', 'Получател', 'Относно', 'Резолюция', 'Статус', 'Файл', 'Линк'],
+  'Договори': ['ID', 'Номер', 'Дата', 'Контрагент', 'Предмет', 'Отговорник', 'Статус', 'Файл', 'Линк'],
+  'Заповеди': ['ID', 'Номер', 'Дата', 'Служител', 'Предмет', 'Резолюция', 'Статус', 'Файл', 'Линк'],
+};
+
+const REG_PREFIX: Record<string, string> = {
+  'Входяща':  'Вх.',
+  'Изходяща': 'Изх.',
+  'Договори': 'Д',
+  'Заповеди': 'РД',
 };
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const sheetName = searchParams.get('sheet') || 'Документи';
+    const sheetName = searchParams.get('sheet') || 'Входяща';
 
     if (!VALID_SHEETS.includes(sheetName)) {
       return NextResponse.json({ error: 'Invalid sheet name' }, { status: 400 });
@@ -103,7 +111,7 @@ export async function POST(req: NextRequest) {
       sheet?: string;
     };
 
-    const sheetName = sheet && VALID_SHEETS.includes(sheet) ? sheet : 'Документи';
+    const sheetName = sheet && VALID_SHEETS.includes(sheet) ? sheet : 'Входяща';
 
     const sheets = await getSheets();
     const spreadsheetId = process.env.SPREADSHEET_ID;
@@ -132,7 +140,7 @@ export async function POST(req: NextRequest) {
         range: `${sheetName}!A1:I1`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
-          values: [SHEET_HEADERS[sheetName] || SHEET_HEADERS['Документи']],
+          values: [SHEET_HEADERS[sheetName] || SHEET_HEADERS['Входяща']],
         },
       });
     }
@@ -145,12 +153,13 @@ export async function POST(req: NextRequest) {
     const rows = existingRows.data.values || [];
     const nextNumber = rows.length + 1;
 
-    // Auto-generate reg number if empty
+    // Auto-generate reg number
     const today = new Date();
     const dd = String(today.getDate()).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const yyyy = today.getFullYear();
-    const autoRegNumber = document.regNumber || `${nextNumber}/${dd}.${mm}.${yyyy}`;
+    const prefix = REG_PREFIX[sheetName] || '';
+    const autoRegNumber = document.regNumber || `${prefix} № ${nextNumber}/${dd}.${mm}.${yyyy}`;
 
     let fileUrl = '';
 
@@ -194,6 +203,7 @@ export async function POST(req: NextRequest) {
     const id = Date.now().toString();
 
     const formatDate = (iso: string) => {
+      if (iso.includes('.')) return iso;
       const [y, m, d] = iso.split('-');
       return `${d}.${m}.${y}`;
     };
