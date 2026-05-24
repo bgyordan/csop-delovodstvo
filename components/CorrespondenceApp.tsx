@@ -289,6 +289,29 @@ export default function CorrespondenceApp() {
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-800">Регистър — {activeSheet}</h2>
                 <div className="flex gap-2">
+                  {userRole === 'admin' && (
+  <button
+    onClick={async () => {
+      if (!confirm(`Архивирай "${activeSheet}" за ${new Date().getFullYear()}?\n\nЗаписите ще се преместят в нов sheet и регистърът ще се изчисти.`)) return;
+      const res = await fetch('/api/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheet: activeSheet }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message);
+        fetchDocuments(activeSheet);
+      } else {
+        alert(data.error);
+      }
+    }}
+    className="flex items-center gap-1.5 px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+  >
+    <span className="hidden sm:inline">Архивирай</span>
+    <span className="sm:hidden">Арх.</span>
+  </button>
+)}
                   <button onClick={() => setPrintOpen(true)} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
                     <Printer className="w-4 h-4" />
                     <span className="hidden sm:inline">Печат</span>
