@@ -68,7 +68,7 @@ export default function CorrespondenceApp() {
     if (typeof window !== 'undefined') {
       const getCookie = (name: string) => document.cookie.split('; ').find(r => r.startsWith(name + '='))?.split('=')[1] || '';
       setUserRole(getCookie('role') || 'viewer');
-      setUserName(decodeURIComponent(getCookie('username').replace(/\+/g, ' ') || ''));
+      setUserName(getCookie('username') || '');
     }
   }, []);
 
