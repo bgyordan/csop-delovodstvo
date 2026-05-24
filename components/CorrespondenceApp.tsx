@@ -95,9 +95,6 @@ export default function CorrespondenceApp() {
     return matchStatus && matchResolution && matchSearch;
   });
 
-  const totalNew = docs.filter((d) => d.status === 'new' || d.status === 'active').length;
-  const totalInProgress = docs.filter((d) => d.status === 'in_progress').length;
-
   const resetForm = () => {
     setForm({ regNumber: '', date: new Date().toISOString().split('T')[0], correspondent: '', subject: '', resolution: '', status: 'new', fileName: '' });
     setFileData(null);
@@ -210,9 +207,35 @@ export default function CorrespondenceApp() {
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-6">
-          <StatCard label="Общо" value={docs.length} icon={<FileText className="w-4 h-4 text-slate-600" />} color="bg-slate-100" textColor="text-slate-700" />
-          <StatCard label={activeSheet === 'Договори' ? 'Активни' : 'Нови'} value={totalNew} icon={<FileText className="w-4 h-4 text-blue-600" />} color="bg-blue-50" textColor="text-blue-700" accent="border-blue-200" />
-          <StatCard label="В процес" value={totalInProgress} icon={<Clock className="w-4 h-4 text-amber-600" />} color="bg-amber-50" textColor="text-amber-700" accent="border-amber-200" />
+          {activeSheet === 'Договори' ? (
+            <>
+              <StatCard label="Общо договори" value={docs.length} icon={<FileText className="w-4 h-4 text-slate-600" />} color="bg-slate-100" textColor="text-slate-700" />
+              <StatCard label="Активни" value={docs.filter(d => d.status === 'active').length} icon={<FileText className="w-4 h-4 text-teal-600" />} color="bg-teal-50" textColor="text-teal-700" accent="border-teal-200" />
+              <StatCard label="Изтичат до 30 дни" value={docs.filter(d => {
+                if (!d.subject) return false;
+                const match = d.subject.match(/\d{2}\.\d{2}\.\d{4}/g);
+                if (!match || match.length < 2) return false;
+                const endStr = match[match.length - 1];
+                const [dd, mm, yyyy] = endStr.split('.');
+                const endDate = new Date(`${yyyy}-${mm}-${dd}`);
+                const diff = Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                return diff >= 0 && diff <= 30;
+              }).length} icon={<Clock className="w-4 h-4 text-amber-600" />} color="bg-amber-50" textColor="text-amber-700" accent="border-amber-200" />
+            </>
+          ) : (
+            <>
+              <StatCard label="Общо" value={docs.length} icon={<FileText className="w-4 h-4 text-slate-600" />} color="bg-slate-100" textColor="text-slate-700" />
+              <StatCard label="Тази година" value={docs.filter(d => {
+                const parts = d.date?.split('.');
+                return parts?.length === 3 && parts[2] === String(new Date().getFullYear());
+              }).length} icon={<FileText className="w-4 h-4 text-blue-600" />} color="bg-blue-50" textColor="text-blue-700" accent="border-blue-200" />
+              <StatCard label="Този месец" value={docs.filter(d => {
+                const parts = d.date?.split('.');
+                const now = new Date();
+                return parts?.length === 3 && parts[1] === String(now.getMonth() + 1).padStart(2, '0') && parts[2] === String(now.getFullYear());
+              }).length} icon={<Clock className="w-4 h-4 text-teal-600" />} color="bg-teal-50" textColor="text-teal-700" accent="border-teal-200" />
+            </>
+          )}
         </div>
 
         {/* Tabs */}
