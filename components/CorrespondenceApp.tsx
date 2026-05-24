@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Plus, FileText, X, Paperclip, CircleCheck as CheckCircle2, Clock, ChevronDown, Calendar, User, ExternalLink, Loader as Loader2, BookOpen, ScrollText } from 'lucide-react';
 import ContractForm from './ContractForm';
+import OrderForm from './OrderForm';
 
 type DocStatus = 'new' | 'in_progress' | 'completed' | 'archived' | 'active' | 'expired' | 'terminated';
 type ResolutionType = 'director' | 'zdasd' | 'zdud' | 'accounting' | 'specialists';
@@ -363,9 +364,15 @@ export default function CorrespondenceApp() {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg border border-slate-200 overflow-hidden max-h-[95vh] flex flex-col">
 
-            {/* Договори — специална форма */}
+            {/* Договори / Заповеди — специални форми */}
             {activeSheet === 'Договори' ? (
               <ContractForm
+                onClose={() => { setModalOpen(false); resetForm(); }}
+                onSave={(docData) => saveDocument(docData)}
+                submitting={submitting}
+              />
+            ) : activeSheet === 'Заповеди' ? (
+              <OrderForm
                 onClose={() => { setModalOpen(false); resetForm(); }}
                 onSave={(docData) => saveDocument(docData)}
                 submitting={submitting}
