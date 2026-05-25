@@ -5,9 +5,11 @@ import { X, Plus, Paperclip, ChevronDown, Calendar, User, AlignLeft, Loader as L
 
 type OrderType = 'leave_paid' | 'leave_unpaid' | 'leave_sick' | 'leave_maternity' | 'mission' | 'duty' | 'hire' | 'dismiss' | 'education' | 'other';
 
+type FileData = { name: string; mimeType: string; data: string };
+
 interface OrderFormProps {
   onClose: () => void;
-  onSave: (doc: Record<string, string>) => void;
+  onSave: (doc: Record<string, string>, fileData?: FileData | null) => void;
   submitting: boolean;
 }
 
@@ -38,10 +40,10 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
     fromDate: '',
     toDate: '',
     days: '',
-    destination: '', // за командировка
+    destination: '',
     fileName: '',
   });
-  const [fileData, setFileData] = useState<{ name: string; mimeType: string; data: string } | null>(null);
+  const [fileData, setFileData] = useState<FileData | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,7 +75,6 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
     }
   };
 
-  // Изчисли брой дни автоматично
   const calcDays = (from: string, to: string) => {
     if (from && to) {
       const diff = Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -104,7 +105,7 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
       resolution: 'director',
       status: 'new',
       fileName: fileData?.name || form.fileName || '',
-    });
+    }, fileData);
   };
 
   return (
@@ -122,8 +123,6 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
       </div>
 
       <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 overflow-y-auto">
-
-        {/* Номер */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             Номер <span className="text-slate-400 normal-case font-normal">(оставете празно за автоматичен)</span>
@@ -131,7 +130,6 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
           <input type="text" placeholder="напр. РД-01-125/24.05.2026" value={form.regNumber} onChange={(e) => setForm((f) => ({ ...f, regNumber: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
         </div>
 
-        {/* Дата на заповедта */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <Calendar className="inline w-3 h-3 mr-1" />Дата на заповедта
@@ -139,11 +137,8 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
           <input type="date" required value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50" />
         </div>
 
-        {/* Вид заповед */}
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-            Вид заповед
-          </label>
+          <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Вид заповед</label>
           <div className="relative">
             <select required value={form.orderType} onChange={(e) => setForm((f) => ({ ...f, orderType: e.target.value as OrderType }))} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
               {ORDER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -152,7 +147,6 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
           </div>
         </div>
 
-        {/* Служител */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <User className="inline w-3 h-3 mr-1" />Служител
@@ -160,7 +154,6 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
           <input type="text" required placeholder="Име и длъжност..." value={form.employee} onChange={(e) => setForm((f) => ({ ...f, employee: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
         </div>
 
-        {/* Полета за отпуск */}
         {isLeave(form.orderType) && (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -180,7 +173,6 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
           </>
         )}
 
-        {/* Полета за командировка/дежурство */}
         {isMission(form.orderType) && (
           <>
             <div>
@@ -200,7 +192,6 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
           </>
         )}
 
-        {/* Относно — за всички видове */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <AlignLeft className="inline w-3 h-3 mr-1" />Допълнително описание <span className="text-slate-400 normal-case font-normal">— незадължително</span>
@@ -208,7 +199,6 @@ export default function OrderForm({ onClose, onSave, submitting }: OrderFormProp
           <textarea rows={2} placeholder="Допълнителна информация..." value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 resize-none disabled:opacity-50" />
         </div>
 
-        {/* Файл */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <Paperclip className="inline w-3 h-3 mr-1" />Прикачен файл
