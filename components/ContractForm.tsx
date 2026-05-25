@@ -6,9 +6,11 @@ import { X, Plus, Paperclip, ChevronDown, Calendar, User, AlignLeft, Loader as L
 type DocStatus = 'active' | 'expired' | 'terminated' | 'in_progress';
 type ContractType = 'delivery' | 'service' | 'rent' | 'labor' | 'civil' | 'other';
 
+type FileData = { name: string; mimeType: string; data: string };
+
 interface ContractFormProps {
   onClose: () => void;
-  onSave: (doc: Record<string, string>) => void;
+  onSave: (doc: Record<string, string>, fileData?: FileData | null) => void;
   submitting: boolean;
 }
 
@@ -46,7 +48,7 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
     notes: '',
     fileName: '',
   });
-  const [fileData, setFileData] = useState<{ name: string; mimeType: string; data: string } | null>(null);
+  const [fileData, setFileData] = useState<FileData | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [showCustomResponsible, setShowCustomResponsible] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -93,10 +95,8 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
     e.preventDefault();
     const responsible = showCustomResponsible ? form.customResponsible : form.responsiblePerson;
     const contractTypeLabel = CONTRACT_TYPES.find(t => t.value === form.contractType)?.label || '';
-    
-    // Build subject combining contract type and actual subject
     const fullSubject = `[${contractTypeLabel}] ${form.subject}`;
-    
+
     onSave({
       regNumber: form.regNumber,
       date: form.date,
@@ -105,15 +105,13 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
       resolution: responsible,
       status: form.status,
       fileName: fileData?.name || form.fileName || '',
-      // Extra fields encoded in notes
       startDate: form.startDate,
       endDate: form.endDate,
       value: form.value,
       notes: form.notes,
-    });
+    }, fileData);
   };
 
-  // Calculate days until expiry
   const daysUntilExpiry = form.endDate ? Math.ceil((new Date(form.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
   const expiryColor = daysUntilExpiry === null ? '' : daysUntilExpiry < 0 ? 'text-red-600' : daysUntilExpiry < 30 ? 'text-amber-600' : 'text-teal-600';
   const expiryText = daysUntilExpiry === null ? '' : daysUntilExpiry < 0 ? `Изтекъл преди ${Math.abs(daysUntilExpiry)} дни!` : daysUntilExpiry === 0 ? 'Изтича днес!' : daysUntilExpiry < 30 ? `Изтича след ${daysUntilExpiry} дни` : `${daysUntilExpiry} дни остават`;
@@ -133,8 +131,6 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
       </div>
 
       <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 overflow-y-auto">
-        
-        {/* Номер */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             Номер <span className="text-slate-400 normal-case font-normal">(оставете празно за автоматичен)</span>
@@ -142,7 +138,6 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
           <input type="text" placeholder="напр. Д-1/2026" value={form.regNumber} onChange={(e) => setForm((f) => ({ ...f, regNumber: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
         </div>
 
-        {/* Вид договор */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <Building2 className="inline w-3 h-3 mr-1" />Вид договор
@@ -155,7 +150,6 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
           </div>
         </div>
 
-        {/* Контрагент */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <User className="inline w-3 h-3 mr-1" />Контрагент
@@ -163,7 +157,6 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
           <input type="text" required placeholder="Фирма или лице..." value={form.correspondent} onChange={(e) => setForm((f) => ({ ...f, correspondent: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
         </div>
 
-        {/* Предмет */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <AlignLeft className="inline w-3 h-3 mr-1" />Предмет на договора
@@ -171,7 +164,6 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
           <textarea required rows={2} placeholder="Кратко описание..." value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 resize-none disabled:opacity-50" />
         </div>
 
-        {/* Дати */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
@@ -186,11 +178,8 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
             <input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50" />
           </div>
         </div>
-        {expiryText && (
-          <p className={`text-xs font-medium ${expiryColor} -mt-2`}>{expiryText}</p>
-        )}
+        {expiryText && <p className={`text-xs font-medium ${expiryColor} -mt-2`}>{expiryText}</p>}
 
-        {/* Стойност */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <Banknote className="inline w-3 h-3 mr-1" />Стойност (лв.) <span className="text-slate-400 normal-case font-normal">— незадължително</span>
@@ -198,11 +187,8 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
           <input type="number" min="0" step="0.01" placeholder="0.00" value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
         </div>
 
-        {/* Отговорно лице */}
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-            Отговорно лице
-          </label>
+          <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Отговорно лице</label>
           <div className="relative mb-2">
             <select value={showCustomResponsible ? 'Друго лице' : form.responsiblePerson} onChange={(e) => handleResponsibleChange(e.target.value)} disabled={submitting} className="appearance-none w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 disabled:opacity-50 cursor-pointer">
               <option value="">Изберете...</option>
@@ -211,11 +197,10 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
           {showCustomResponsible && (
-            <input type="text" required placeholder="Въведете име и длъжност..." value={form.customResponsible} onChange={(e) => setForm((f) => ({ ...f, customResponsible: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
+            <input type="text" required placeholder="Въведете ime и длъжност..." value={form.customResponsible} onChange={(e) => setForm((f) => ({ ...f, customResponsible: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 disabled:opacity-50" />
           )}
         </div>
 
-        {/* Статус */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Статус</label>
           <div className="relative">
@@ -229,7 +214,6 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
           </div>
         </div>
 
-        {/* Бележки */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             Бележки <span className="text-slate-400 normal-case font-normal">— незадължително</span>
@@ -237,7 +221,6 @@ export default function ContractForm({ onClose, onSave, submitting }: ContractFo
           <textarea rows={2} placeholder="Допълнителна информация..." value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} disabled={submitting} className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 placeholder:text-slate-400 resize-none disabled:opacity-50" />
         </div>
 
-        {/* Файл */}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             <Paperclip className="inline w-3 h-3 mr-1" />Прикачен файл
