@@ -121,7 +121,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'SPREADSHEET_ID not configured' }, { status: 500 });
     }
 
-    // Check if sheet exists, if not create it with headers
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
     const existingSheet = spreadsheet.data.sheets?.find(
       (s) => s.properties?.title === sheetName
@@ -145,7 +144,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Get last reg number for auto-numbering
     const existingRows = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${sheetName}!B2:B`,
@@ -153,7 +151,6 @@ export async function POST(req: NextRequest) {
     const rows = existingRows.data.values || [];
     const nextNumber = rows.length + 1;
 
-    // Auto-generate reg number
     const today = new Date();
     const dd = String(today.getDate()).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -163,7 +160,6 @@ export async function POST(req: NextRequest) {
 
     let fileUrl = '';
 
-    // Upload file to Google Drive if provided
     if (fileData && fileData.data && driveFolderId) {
       try {
         const driveAuth = getAuth();
@@ -242,6 +238,80 @@ export async function POST(req: NextRequest) {
     console.error('POST Error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to create document' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { document, sheet } = body as {
+      document: Document;
+      sheet?: string;
+    };
+
+    const sheetName = sheet && VALID_SHEETS.includes(sheet) ? sheet : 'Входяща';
+
+    const sheets = await getSheets();
+    const spreadsheetId = process.env.SPREADSHEET_ID;
+
+    if (!spreadsheetId) {
+      return NextResponse.json({ error: 'SPREADSHEET_ID not configured' }, { status: 500 });
+    }
+
+    // Намери реда по ID
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!A2:I`,
+    });
+
+    const rows = response.data.values || [];
+    const rowIndex = rows.findIndex((row) => row[0] === document.id);
+
+    if (rowIndex === -1) {
+      return NextResponse.json({ error: 'Документът не е намерен' }, { status: 404 });
+    }
+
+    // Реалният ред в sheet-а е rowIndex + 2 (заради заглавния ред и 0-базиран индекс)
+    const sheetRow = rowIndex + 2;
+
+    const formatDate = (iso: string) => {
+      if (iso.includes('.')) return iso;
+      const [y, m, d] = iso.split('-');
+      return `${d}.${m}.${y}`;
+    };
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetName}!A${sheetRow}:I${sheetRow}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[
+          document.id,
+          document.regNumber,
+          formatDate(document.date),
+          document.correspondent,
+          document.subject,
+          document.resolution,
+          document.status,
+          document.fileName,
+          document.fileUrl || '',
+        ]],
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      document: {
+        ...document,
+        date: formatDate(document.date),
+      },
+    });
+  } catch (error) {
+    console.error('PUT Error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update document' },
       { status: 500 }
     );
   }
