@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     // Изчисти оригиналния sheet (остави само заглавния ред)
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
-      range: `${sheet}!A2:I`,
+      range: `${sheet}!A2:Z1000`,
     });
 
     return NextResponse.json({
