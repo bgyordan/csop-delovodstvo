@@ -124,13 +124,13 @@ export default function CorrespondenceApp() {
     });
   };
 
-  const saveDocument = async (docData: Record<string, string>) => {
+  const saveDocument = async (docData: Record<string, string>, fd?: { name: string; mimeType: string; data: string } | null) => {
     setSubmitting(true);
     try {
       const response = await fetch('/api/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheet: activeSheet, document: docData, fileData }),
+        body: JSON.stringify({ sheet: activeSheet, document: docData, fileData: fd ?? fileData }),
       });
       if (response.ok) {
         const data = await response.json();
@@ -509,9 +509,9 @@ export default function CorrespondenceApp() {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg border border-slate-200 overflow-hidden max-h-[95vh] flex flex-col">
             {activeSheet === 'Договори' ? (
-              <ContractForm onClose={() => { setModalOpen(false); resetForm(); }} onSave={(docData) => saveDocument(docData)} submitting={submitting} />
+              <ContractForm onClose={() => { setModalOpen(false); resetForm(); }} onSave={(docData, fd) => saveDocument(docData, fd)} submitting={submitting} />
             ) : activeSheet === 'Заповеди' ? (
-              <OrderForm onClose={() => { setModalOpen(false); resetForm(); }} onSave={(docData) => saveDocument(docData)} submitting={submitting} />
+              <OrderForm onClose={() => { setModalOpen(false); resetForm(); }} onSave={(docData, fd) => saveDocument(docData, fd)} submitting={submitting} />
             ) : (
               <>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/60 shrink-0">
