@@ -231,7 +231,7 @@ export default function CorrespondenceApp() {
   const statusOptions = activeSheet === 'Договори'
     ? [{ value: 'all', label: 'Всички статуси' }, { value: 'active', label: 'Активен' }, { value: 'in_progress', label: 'В изпълнение' }, { value: 'expired', label: 'Изтекъл' }, { value: 'terminated', label: 'Прекратен' }]
     : [{ value: 'all', label: 'Всички статуси' }, { value: 'new', label: 'Нов' }, { value: 'in_progress', label: 'В процес' }, { value: 'completed', label: 'Изпълнен' }, { value: 'archived', label: 'Архивиран' }];
-  const isSpecialForm = activeSheet === 'Договори' || activeSheet === 'Заповеди';
+  const isSpecialForm = activeSheet === 'Договори';
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
